@@ -25,7 +25,7 @@ CHAT_ID = os.environ.get("CHAT_ID")
 BIST30 = [
     "AKBNK", "ARCLK", "ASELS", "BIMAS", "DOHOL",
     "EKGYO", "EREGL", "FROTO", "GARAN", "HALKB",
-    "ISCTR", "KCHOL", "KOZAA", "KOZAL", "KRDMD",
+    "ISCTR", "KCHOL", "TRMET", "TRALT", "KRDMD",
     "MGROS", "ODAS",  "PETKM", "PGSUS", "SAHOL",
     "SASA",  "SISE",  "TAVHL", "TCELL", "THYAO",
     "TKFEN", "TOASO", "TTKOM", "TUPRS", "VAKBN"
