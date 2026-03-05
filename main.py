@@ -79,6 +79,10 @@ def hesapla_mfi(df, period=14):
     MFI hesapla. Son 2 MFI degerine gore trend: pozitif/negatif.
     MFI degeri 0-100 arasi doner.
     """
+    # Volume kontrolu
+    if df['Volume'].iloc[-14:].sum() == 0:
+        return None, "N/A"
+
     tp = (df['High'] + df['Low'] + df['Close']) / 3
     mf = tp * df['Volume']
 
@@ -90,13 +94,10 @@ def hesapla_mfi(df, period=14):
 
     mfi = 100 - (100 / (1 + pos_sum / neg_sum.replace(0, np.nan)))
 
-    # Son MFI degeri
     mfi_son    = round(mfi.iloc[-1], 1)
     mfi_onceki = round(mfi.iloc[-2], 1)
 
-    # Trend: son sinyal onceki sinyal ile karsilastir
-    # "Son sinyalden iki onceki": -1 vs -2 karsilastirma
-    trend = "POZ" if mfi_son > mfi_onceki else "NEG"
+    trend = "POZITIF" if mfi_son > mfi_onceki else "NEGATIF"
 
     return mfi_son, trend
 
@@ -117,7 +118,7 @@ def analiz_et():
     sonuclar = []
     for hisse in BIST30:
         try:
-            df = yf.download(yahoo_sembol(hisse), period="6mo", interval="1d",
+            df = yf.download(yahoo_sembol(hisse), period="60d", interval="4h",
                              progress=False, auto_adjust=True)
             if df is None or len(df) < 50:
                 continue
@@ -201,7 +202,7 @@ def poz_renk(poz):
     return C_BEKLE_BG, C_BEKLE_TEXT
 
 def mfi_trend_renk(trend):
-    return (C_POZ_BG, C_POZ_TEXT) if trend == "POZ" else (C_NEG_BG, C_NEG_TEXT)
+    return (C_POZ_BG, C_POZ_TEXT) if trend == "POZITIF" else (C_NEG_BG, C_NEG_TEXT)
 
 def mfi_val_renk(val):
     if val >= 80: return colors.HexColor("#DC3545"), colors.white   # Asiri alim
@@ -360,7 +361,7 @@ def pdf_olustur(sonuclar):
                                  fontName='Helvetica-Oblique')
     story.append(Paragraph(
         "MFI: 80+ Asiri Alim | 60-80 Guclu | 40-60 Notr | 20-40 Zayif | 0-20 Asiri Satim   |   "
-        "MFI Trend: POZ=Son deger oncekinden yuksek | NEG=Son deger oncekinden dusuk",
+        "MFI Trend: POZITIF=Son deger oncekinden yuksek | NEGATIF=Son deger oncekinden dusuk",
         legend_stil
     ))
 
