@@ -7,21 +7,19 @@ import yfinance as yf
 from datetime import datetime
 from io import BytesIO
 import schedule
+import locale
 
 # reportlab imports
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 TOKEN   = os.environ.get("TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-# ============================================================
-# BIST 30 HİSSELERİ
-# ============================================================
 BIST30 = [
     "AKBNK", "ARCLK", "ASELS", "BIMAS", "DOHOL",
     "EKGYO", "EREGL", "FROTO", "GARAN", "HALKB",
@@ -31,11 +29,22 @@ BIST30 = [
     "TKFEN", "TOASO", "TTKOM", "TUPRS", "VAKBN"
 ]
 
-def yahoo_sembol(hisse):
-    return f"{hisse}.IS"
+def yahoo_sembol(h): return f"{h}.IS"
 
 # ============================================================
-# İNDİKATÖR HESAPLAMALARI (TradingView ile birebir)
+# GUN ADI (Turkce)
+# ============================================================
+GUNLER = {
+    "Monday": "PAZARTESI", "Tuesday": "SALI", "Wednesday": "CARSAMBA",
+    "Thursday": "PERSEMBE", "Friday": "CUMA", "Saturday": "CUMARTESI",
+    "Sunday": "PAZAR"
+}
+
+def gun_adi():
+    return GUNLER.get(datetime.now().strftime("%A"), datetime.now().strftime("%A"))
+
+# ============================================================
+# INDIKTOR HESAPLAMALARI
 # ============================================================
 
 def hesapla_wavetrend(df, n1=10, n2=21):
@@ -45,46 +54,63 @@ def hesapla_wavetrend(df, n1=10, n2=21):
     ci  = (ap - esa) / (0.015 * d)
     wt1 = ci.ewm(span=n2, adjust=False).mean()
     wt2 = wt1.rolling(4).mean()
-    wt_yesil = wt1.iloc[-1] > wt2.iloc[-1]
-    return "AL" if wt_yesil else "SAT", wt_yesil
+    return wt1.iloc[-1] > wt2.iloc[-1]
 
 def hesapla_macd(df, fast=12, slow=26, signal=9):
     ema_fast = df['Close'].ewm(span=fast, adjust=False).mean()
     ema_slow = df['Close'].ewm(span=slow, adjust=False).mean()
-    macd     = ema_fast - ema_slow
-    sig      = macd.ewm(span=signal, adjust=False).mean()
-    macd_yesil = macd.iloc[-1] > sig.iloc[-1]
-    return "AL" if macd_yesil else "SAT", macd_yesil
+    macd = ema_fast - ema_slow
+    sig  = macd.ewm(span=signal, adjust=False).mean()
+    return macd.iloc[-1] > sig.iloc[-1]
 
 def hesapla_smiio(df, length=13, smooth=5, sig_len=3):
-    ll      = df['Low'].rolling(length).min()
-    hh      = df['High'].rolling(length).max()
-    diff    = hh - ll
-    rdiff   = df['Close'] - (hh + ll) / 2
+    ll = df['Low'].rolling(length).min()
+    hh = df['High'].rolling(length).max()
+    diff = hh - ll
+    rdiff = df['Close'] - (hh + ll) / 2
     avgrel  = rdiff.ewm(span=smooth, adjust=False).mean().ewm(span=smooth, adjust=False).mean()
     avgdiff = diff.ewm(span=smooth, adjust=False).mean().ewm(span=smooth, adjust=False).mean()
-    smi     = np.where(avgdiff != 0, avgrel / (avgdiff / 2) * 100, 0)
-    smi_s   = pd.Series(smi, index=df.index)
-    sinyal  = smi_s.ewm(span=sig_len, adjust=False).mean()
-    smiio_yesil = smi_s.iloc[-1] > sinyal.iloc[-1]
-    return "AL" if smiio_yesil else "SAT", smiio_yesil
+    smi = pd.Series(np.where(avgdiff != 0, avgrel / (avgdiff / 2) * 100, 0), index=df.index)
+    sinyal = smi.ewm(span=sig_len, adjust=False).mean()
+    return smi.iloc[-1] > sinyal.iloc[-1]
 
-def pozisyon_belirle(smi_al, wt_al, macd_al):
-    al_sayisi  = sum([smi_al, wt_al, macd_al])
-    sat_sayisi = 3 - al_sayisi
-    if al_sayisi == 3:
-        return "GUCLU AL"
-    elif al_sayisi == 2:
-        return "AL"
-    elif sat_sayisi == 3:
-        return "GUCLU SAT"
-    elif sat_sayisi == 2:
-        return "SAT"
-    else:
-        return "BEKLE"
+def hesapla_mfi(df, period=14):
+    """
+    MFI hesapla. Son 2 MFI degerine gore trend: pozitif/negatif.
+    MFI degeri 0-100 arasi doner.
+    """
+    tp = (df['High'] + df['Low'] + df['Close']) / 3
+    mf = tp * df['Volume']
+
+    pos_mf = pd.Series(np.where(tp > tp.shift(1), mf, 0), index=df.index)
+    neg_mf = pd.Series(np.where(tp < tp.shift(1), mf, 0), index=df.index)
+
+    pos_sum = pos_mf.rolling(period).sum()
+    neg_sum = neg_mf.rolling(period).sum()
+
+    mfi = 100 - (100 / (1 + pos_sum / neg_sum.replace(0, np.nan)))
+
+    # Son MFI degeri
+    mfi_son    = round(mfi.iloc[-1], 1)
+    mfi_onceki = round(mfi.iloc[-2], 1)
+
+    # Trend: son sinyal onceki sinyal ile karsilastir
+    # "Son sinyalden iki onceki": -1 vs -2 karsilastirma
+    trend = "POZ" if mfi_son > mfi_onceki else "NEG"
+
+    return mfi_son, trend
+
+def pozisyon(smi_al, wt_al, macd_al):
+    al  = sum([smi_al, wt_al, macd_al])
+    sat = 3 - al
+    if al == 3:   return "GUCLU AL"
+    if al == 2:   return "AL"
+    if sat == 3:  return "GUCLU SAT"
+    if sat == 2:  return "SAT"
+    return "BEKLE"
 
 # ============================================================
-# VERİ ÇEK VE ANALİZ ET
+# ANALIZ
 # ============================================================
 
 def analiz_et():
@@ -97,210 +123,297 @@ def analiz_et():
                 continue
             df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
 
-            smi_sinyal, smi_al   = hesapla_smiio(df)
-            wt_sinyal,  wt_al    = hesapla_wavetrend(df)
-            macd_sinyal, macd_al = hesapla_macd(df)
-            poz = pozisyon_belirle(smi_al, wt_al, macd_al)
+            smi_al  = hesapla_smiio(df)
+            wt_al   = hesapla_wavetrend(df)
+            macd_al = hesapla_macd(df)
+            poz     = pozisyon(smi_al, wt_al, macd_al)
+            mfi_val, mfi_trend = hesapla_mfi(df)
 
             sonuclar.append({
-                "Hisse":   hisse,
-                "SMI":     smi_sinyal,
-                "WT":      wt_sinyal,
-                "MACD":    macd_sinyal,
-                "Pozisyon": poz,
-                "smi_al":  smi_al,
-                "wt_al":   wt_al,
-                "macd_al": macd_al,
+                "Hisse":     hisse,
+                "SMI":       "AL" if smi_al  else "SAT",
+                "WT":        "AL" if wt_al   else "SAT",
+                "MACD":      "AL" if macd_al else "SAT",
+                "Pozisyon":  poz,
+                "MFI_Trend": mfi_trend,
+                "MFI_Val":   mfi_val,
+                "smi_al":    smi_al,
+                "wt_al":     wt_al,
+                "macd_al":   macd_al,
             })
         except Exception as e:
             print(f"{hisse} hata: {e}")
     return sonuclar
 
 # ============================================================
-# TELEGRAM METİN MESAJI
+# RENK PALETI - Acik/Profesyonel Tema
 # ============================================================
 
-def mesaj_olustur(sonuclar):
-    tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
-    mesaj = f"*BIST 30 SINYAL TABLOSU*\n{tarih}\n\n"
-    mesaj += "`Hisse  | SMI | WT  | MACD | Pozisyon    `\n"
-    mesaj += "`" + "-"*44 + "`\n"
+# Baslik renkleri
+C_BASLIK_BG   = colors.HexColor("#1B2A4A")   # Koyu lacivert baslik
+C_BASLIK_TEXT = colors.HexColor("#FFFFFF")
 
-    for r in sonuclar:
-        hisse = r['Hisse'].ljust(6)
-        smi   = r['SMI'].ljust(3)
-        wt    = r['WT'].ljust(3)
-        macd  = r['MACD'].ljust(4)
-        poz   = r['Pozisyon'].ljust(11)
-        mesaj += f"`{hisse} | {smi} | {wt} | {macd} | {poz}`\n"
+# Sutun basliklari
+C_SUTUN_BG    = colors.HexColor("#2E4A7A")
+C_SUTUN_TEXT  = colors.HexColor("#E8F0FE")
 
-    guclu_al  = [r['Hisse'] for r in sonuclar if r['Pozisyon'] == "GUCLU AL"]
-    guclu_sat = [r['Hisse'] for r in sonuclar if r['Pozisyon'] == "GUCLU SAT"]
+# Hisse sutunu
+C_HISSE_BG    = colors.HexColor("#EEF2FF")
+C_HISSE_TEXT  = colors.HexColor("#1B2A4A")
 
-    if guclu_al:
-        mesaj += f"\n*GUCLU AL:* {', '.join(guclu_al)}"
-    if guclu_sat:
-        mesaj += f"\n*GUCLU SAT:* {', '.join(guclu_sat)}"
+# Satir renkleri (zebra)
+C_SATIR1      = colors.HexColor("#FFFFFF")
+C_SATIR2      = colors.HexColor("#F5F7FF")
 
-    return mesaj
+# AL renkleri - acik yesil tonlar
+C_AL_BG       = colors.HexColor("#D4EDDA")
+C_AL_TEXT     = colors.HexColor("#155724")
+C_GUCLU_AL_BG = colors.HexColor("#28A745")
+C_GUCLU_AL_TX = colors.HexColor("#FFFFFF")
 
-# ============================================================
-# PDF OLUŞTUR
-# ============================================================
+# SAT renkleri - acik kirmizi tonlar
+C_SAT_BG      = colors.HexColor("#F8D7DA")
+C_SAT_TEXT    = colors.HexColor("#721C24")
+C_GUCLU_SAT_BG= colors.HexColor("#DC3545")
+C_GUCLU_SAT_TX= colors.HexColor("#FFFFFF")
 
-YESIL   = colors.HexColor("#0d6e3f")
-KIRMIZI = colors.HexColor("#8b0000")
-MAVI    = colors.HexColor("#0a3d6b")
-KOYU    = colors.HexColor("#001a33")
-ALTIN   = colors.HexColor("#4a90d9")
-SATIR1  = colors.HexColor("#071526")
-SATIR2  = colors.HexColor("#0a1f33")
+# BEKLE
+C_BEKLE_BG    = colors.HexColor("#FFF3CD")
+C_BEKLE_TEXT  = colors.HexColor("#856404")
+
+# MFI
+C_POZ_BG      = colors.HexColor("#C8F7C5")
+C_POZ_TEXT    = colors.HexColor("#1A6B19")
+C_NEG_BG      = colors.HexColor("#FADBD8")
+C_NEG_TEXT    = colors.HexColor("#922B21")
+
+# Grid
+C_GRID        = colors.HexColor("#C5D0E8")
 
 def sinyal_renk(sinyal):
-    return YESIL if sinyal == "AL" else KIRMIZI
+    return (C_AL_BG, C_AL_TEXT) if sinyal == "AL" else (C_SAT_BG, C_SAT_TEXT)
 
 def poz_renk(poz):
-    if poz in ("GUCLU AL", "AL"):
-        return YESIL
-    elif poz in ("GUCLU SAT", "SAT"):
-        return KIRMIZI
-    return MAVI
+    if poz == "GUCLU AL":  return C_GUCLU_AL_BG,  C_GUCLU_AL_TX
+    if poz == "AL":        return C_AL_BG,         C_AL_TEXT
+    if poz == "GUCLU SAT": return C_GUCLU_SAT_BG,  C_GUCLU_SAT_TX
+    if poz == "SAT":       return C_SAT_BG,        C_SAT_TEXT
+    return C_BEKLE_BG, C_BEKLE_TEXT
 
-def poz_emoji(poz):
-    return {
-        "GUCLU AL":  "GUCLU AL",
-        "AL":        "AL",
-        "GUCLU SAT": "GUCLU SAT",
-        "SAT":       "SAT",
-        "BEKLE":     "BEKLE",
-    }.get(poz, poz)
+def mfi_trend_renk(trend):
+    return (C_POZ_BG, C_POZ_TEXT) if trend == "POZ" else (C_NEG_BG, C_NEG_TEXT)
+
+def mfi_val_renk(val):
+    if val >= 80: return colors.HexColor("#DC3545"), colors.white   # Asiri alim
+    if val >= 60: return C_AL_BG, C_AL_TEXT                         # Guclu
+    if val <= 20: return colors.HexColor("#6F42C1"), colors.white   # Asiri satim
+    if val <= 40: return C_SAT_BG, C_SAT_TEXT                       # Zayif
+    return C_BEKLE_BG, C_BEKLE_TEXT                                 # Notr
+
+# ============================================================
+# PDF OLUSTUR
+# ============================================================
+
+def baslik_olustur():
+    now  = datetime.now()
+    tarih = now.strftime("%d.%m.%Y")
+    saat  = now.strftime("%H:%M")
+    gun   = gun_adi()
+    return f"MKS TARAMA   {tarih} {gun} {saat}"
+
+def pdf_dosya_adi():
+    now = datetime.now()
+    return f"MKS_TARAMA_{now.strftime('%d%m%Y')}_{now.strftime('%H%M')}.pdf"
 
 def pdf_olustur(sonuclar):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
-        buffer, pagesize=A4,
-        rightMargin=1.5*cm, leftMargin=1.5*cm,
-        topMargin=1.5*cm, bottomMargin=1.5*cm,
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=1.2*cm,
+        leftMargin=1.2*cm,
+        topMargin=1.2*cm,
+        bottomMargin=1.2*cm,
     )
 
     styles = getSampleStyleSheet()
+
     baslik_style = ParagraphStyle(
-        'Baslik', parent=styles['Title'],
-        fontSize=16, textColor=ALTIN,
-        alignment=TA_CENTER, spaceAfter=4,
+        'Baslik',
+        fontSize=14,
+        textColor=C_BASLIK_TEXT,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold',
+        spaceAfter=2,
     )
-    tarih_style = ParagraphStyle(
-        'Tarih', parent=styles['Normal'],
-        fontSize=10, textColor=colors.white,
-        alignment=TA_CENTER, spaceAfter=12,
-    )
-    ozet_stil = ParagraphStyle(
-        'Ozet', parent=styles['Normal'],
-        fontSize=10, textColor=colors.white, spaceAfter=6,
+    alt_baslik_style = ParagraphStyle(
+        'AltBaslik',
+        fontSize=8,
+        textColor=colors.HexColor("#8899BB"),
+        alignment=TA_CENTER,
+        fontName='Helvetica',
+        spaceAfter=8,
     )
 
     story = []
-    tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
-    story.append(Paragraph("BIST 30 SINYAL TABLOSU", baslik_style))
-    story.append(Paragraph(f"Guncelleme: {tarih}", tarih_style))
-    story.append(Spacer(1, 0.3*cm))
 
-    # Tablo verisi
-    tablo_data = [["HISSE", "SMI", "WT", "MACD", "POZISYON"]]
+    # Baslik kutusu
+    baslik_data = [[Paragraph(baslik_olustur(), baslik_style)]]
+    baslik_tablo = Table(baslik_data, colWidths=[26*cm])
+    baslik_tablo.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), C_BASLIK_BG),
+        ('TOPPADDING', (0,0), (-1,-1), 10),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+        ('ROUNDEDCORNERS', [4, 4, 4, 4]),
+    ]))
+    story.append(baslik_tablo)
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph("SMI | WaveTrend | MACD | MFI   -   Gunluk Grafik Analizi", alt_baslik_style))
+
+    # Ana tablo
+    headers = ["HISSE", "SMI", "WT", "MACD", "POZISYON", "MFI TREND", "MFI DEGER"]
+    tablo_data = [headers]
+
     for r in sonuclar:
+        mfi_str = f"{r['MFI_Val']}"
         tablo_data.append([
             r['Hisse'],
             "AL" if r['SMI']  == "AL" else "SAT",
             "AL" if r['WT']   == "AL" else "SAT",
             "AL" if r['MACD'] == "AL" else "SAT",
-            poz_emoji(r['Pozisyon']),
+            r['Pozisyon'],
+            r['MFI_Trend'],
+            mfi_str,
         ])
 
-    tablo = Table(tablo_data, colWidths=[3.2*cm, 3*cm, 3*cm, 3*cm, 4.3*cm])
+    col_w = [3*cm, 2.8*cm, 2.8*cm, 2.8*cm, 3.8*cm, 3.2*cm, 3.2*cm]
+    tablo = Table(tablo_data, colWidths=col_w, repeatRows=1)
 
     stil = [
-        # Başlık
-        ('BACKGROUND',   (0, 0), (-1, 0),  KOYU),
-        ('TEXTCOLOR',    (0, 0), (-1, 0),  ALTIN),
-        ('FONTNAME',     (0, 0), (-1, 0),  'Helvetica-Bold'),
-        ('FONTSIZE',     (0, 0), (-1, 0),  10),
-        ('ALIGN',        (0, 0), (-1, 0),  'CENTER'),
-        ('BOTTOMPADDING',(0, 0), (-1, 0),  8),
-        ('TOPPADDING',   (0, 0), (-1, 0),  8),
-        # Tüm veri hücreleri
-        ('FONTSIZE',     (0, 1), (-1, -1), 9),
-        ('ALIGN',        (0, 1), (-1, -1), 'CENTER'),
-        ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING',(0, 1), (-1, -1), 6),
-        ('TOPPADDING',   (0, 1), (-1, -1), 6),
-        ('GRID',         (0, 0), (-1, -1), 0.5, colors.HexColor("#1a3a5c")),
-        # Hisse sütunu
-        ('BACKGROUND',   (0, 1), (0, -1),  MAVI),
-        ('TEXTCOLOR',    (0, 1), (0, -1),  colors.white),
-        ('FONTNAME',     (0, 1), (0, -1),  'Helvetica-Bold'),
+        # Sutun basliklari
+        ('BACKGROUND',   (0,0), (-1,0),  C_SUTUN_BG),
+        ('TEXTCOLOR',    (0,0), (-1,0),  C_SUTUN_TEXT),
+        ('FONTNAME',     (0,0), (-1,0),  'Helvetica-Bold'),
+        ('FONTSIZE',     (0,0), (-1,0),  9),
+        ('ALIGN',        (0,0), (-1,0),  'CENTER'),
+        ('TOPPADDING',   (0,0), (-1,0),  7),
+        ('BOTTOMPADDING',(0,0), (-1,0),  7),
+        # Veri satirlari
+        ('FONTSIZE',     (0,1), (-1,-1), 8.5),
+        ('ALIGN',        (0,1), (-1,-1), 'CENTER'),
+        ('VALIGN',       (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING',   (0,1), (-1,-1), 5),
+        ('BOTTOMPADDING',(0,1), (-1,-1), 5),
+        ('GRID',         (0,0), (-1,-1), 0.4, C_GRID),
+        # Hisse sutunu
+        ('BACKGROUND',   (0,1), (0,-1),  C_HISSE_BG),
+        ('TEXTCOLOR',    (0,1), (0,-1),  C_HISSE_TEXT),
+        ('FONTNAME',     (0,1), (0,-1),  'Helvetica-Bold'),
+        ('ALIGN',        (0,1), (0,-1),  'LEFT'),
     ]
 
+    # Zebra + dinamik renkler
     for i, r in enumerate(sonuclar, start=1):
-        # Satır arkaplanı (zebra)
-        bg = SATIR2 if i % 2 == 0 else SATIR1
-        stil.append(('BACKGROUND', (0, i), (0, i), MAVI))
+        zebra = C_SATIR1 if i % 2 == 0 else C_SATIR2
         # SMI
-        stil.append(('BACKGROUND', (1, i), (1, i), sinyal_renk(r['SMI'])))
-        stil.append(('TEXTCOLOR',  (1, i), (1, i), colors.white))
+        bg, tx = sinyal_renk(r['SMI'])
+        stil += [('BACKGROUND',(1,i),(1,i),bg), ('TEXTCOLOR',(1,i),(1,i),tx),
+                 ('FONTNAME',(1,i),(1,i),'Helvetica-Bold')]
         # WT
-        stil.append(('BACKGROUND', (2, i), (2, i), sinyal_renk(r['WT'])))
-        stil.append(('TEXTCOLOR',  (2, i), (2, i), colors.white))
+        bg, tx = sinyal_renk(r['WT'])
+        stil += [('BACKGROUND',(2,i),(2,i),bg), ('TEXTCOLOR',(2,i),(2,i),tx),
+                 ('FONTNAME',(2,i),(2,i),'Helvetica-Bold')]
         # MACD
-        stil.append(('BACKGROUND', (3, i), (3, i), sinyal_renk(r['MACD'])))
-        stil.append(('TEXTCOLOR',  (3, i), (3, i), colors.white))
+        bg, tx = sinyal_renk(r['MACD'])
+        stil += [('BACKGROUND',(3,i),(3,i),bg), ('TEXTCOLOR',(3,i),(3,i),tx),
+                 ('FONTNAME',(3,i),(3,i),'Helvetica-Bold')]
         # Pozisyon
-        stil.append(('BACKGROUND', (4, i), (4, i), poz_renk(r['Pozisyon'])))
-        stil.append(('TEXTCOLOR',  (4, i), (4, i), colors.white))
-        stil.append(('FONTNAME',   (4, i), (4, i), 'Helvetica-Bold'))
+        bg, tx = poz_renk(r['Pozisyon'])
+        stil += [('BACKGROUND',(4,i),(4,i),bg), ('TEXTCOLOR',(4,i),(4,i),tx),
+                 ('FONTNAME',(4,i),(4,i),'Helvetica-Bold')]
+        # MFI Trend
+        bg, tx = mfi_trend_renk(r['MFI_Trend'])
+        stil += [('BACKGROUND',(5,i),(5,i),bg), ('TEXTCOLOR',(5,i),(5,i),tx),
+                 ('FONTNAME',(5,i),(5,i),'Helvetica-Bold')]
+        # MFI Deger
+        bg, tx = mfi_val_renk(r['MFI_Val'])
+        stil += [('BACKGROUND',(6,i),(6,i),bg), ('TEXTCOLOR',(6,i),(6,i),tx),
+                 ('FONTNAME',(6,i),(6,i),'Helvetica-Bold')]
 
     tablo.setStyle(TableStyle(stil))
     story.append(tablo)
 
-    story.append(Spacer(1, 0.5*cm))
+    # Alt bilgi
+    story.append(Spacer(1, 0.4*cm))
     guclu_al  = [r['Hisse'] for r in sonuclar if r['Pozisyon'] == "GUCLU AL"]
     guclu_sat = [r['Hisse'] for r in sonuclar if r['Pozisyon'] == "GUCLU SAT"]
+
+    ozet_stil = ParagraphStyle('Ozet', fontSize=8, textColor=colors.HexColor("#333333"),
+                               fontName='Helvetica', spaceAfter=3)
     if guclu_al:
         story.append(Paragraph(f"GUCLU AL: {', '.join(guclu_al)}", ozet_stil))
     if guclu_sat:
         story.append(Paragraph(f"GUCLU SAT: {', '.join(guclu_sat)}", ozet_stil))
+
+    # MFI aciklama
+    legend_stil = ParagraphStyle('Legend', fontSize=7, textColor=colors.HexColor("#888888"),
+                                 fontName='Helvetica-Oblique')
+    story.append(Paragraph(
+        "MFI: 80+ Asiri Alim | 60-80 Guclu | 40-60 Notr | 20-40 Zayif | 0-20 Asiri Satim   |   "
+        "MFI Trend: POZ=Son deger oncekinden yuksek | NEG=Son deger oncekinden dusuk",
+        legend_stil
+    ))
 
     doc.build(story)
     buffer.seek(0)
     return buffer
 
 # ============================================================
-# TELEGRAM GÖNDER
+# TELEGRAM METIN
+# ============================================================
+
+def mesaj_olustur(sonuclar):
+    now = datetime.now()
+    baslik = f"MKS TARAMA {now.strftime('%d.%m.%Y')} {gun_adi()} {now.strftime('%H:%M')}"
+    mesaj = f"*{baslik}*\n\n"
+    mesaj += "`Hisse  |SMI|WT |MACD|Pozisyon   |MFI|Val`\n"
+    mesaj += "`" + "-"*46 + "`\n"
+    for r in sonuclar:
+        h   = r['Hisse'].ljust(6)
+        smi = r['SMI'][:3].ljust(3)
+        wt  = r['WT'][:2].ljust(3)
+        mac = r['MACD'][:3].ljust(4)
+        poz = r['Pozisyon'][:10].ljust(10)
+        mft = r['MFI_Trend'].ljust(3)
+        mfv = str(r['MFI_Val']).ljust(4)
+        mesaj += f"`{h}|{smi}|{wt}|{mac}|{poz}|{mft}|{mfv}`\n"
+
+    guclu_al  = [r['Hisse'] for r in sonuclar if r['Pozisyon'] == "GUCLU AL"]
+    guclu_sat = [r['Hisse'] for r in sonuclar if r['Pozisyon'] == "GUCLU SAT"]
+    if guclu_al:  mesaj += f"\n*GUCLU AL:* {', '.join(guclu_al)}"
+    if guclu_sat: mesaj += f"\n*GUCLU SAT:* {', '.join(guclu_sat)}"
+    return mesaj
+
+# ============================================================
+# TELEGRAM GONDER
 # ============================================================
 
 def telegram_metin_gonder(mesaj):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     r = requests.post(url, data={"chat_id": CHAT_ID, "text": mesaj, "parse_mode": "Markdown"})
-    if r.status_code == 200:
-        print(f"Metin gonderildi: {datetime.now().strftime('%H:%M')}")
-    else:
-        print(f"Metin hatasi: {r.text}")
+    print(f"Metin: {r.status_code} {datetime.now().strftime('%H:%M')}")
 
-def telegram_pdf_gonder(pdf_buffer):
+def telegram_pdf_gonder(pdf_buffer, dosya_adi):
     url = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
-    tarih = datetime.now().strftime("%d%m%Y_%H%M")
-    dosya_adi = f"BIST30_{tarih}.pdf"
     r = requests.post(
         url,
-        data={"chat_id": CHAT_ID, "caption": "BIST 30 Sinyal Tablosu (PDF)"},
+        data={"chat_id": CHAT_ID, "caption": dosya_adi},
         files={"document": (dosya_adi, pdf_buffer, "application/pdf")}
     )
-    if r.status_code == 200:
-        print(f"PDF gonderildi: {datetime.now().strftime('%H:%M')}")
-    else:
-        print(f"PDF hatasi: {r.text}")
+    print(f"PDF: {r.status_code} {datetime.now().strftime('%H:%M')}")
 
 # ============================================================
-# ANA FONKSİYON — SAATLİK
+# ANA FONKSIYON
 # ============================================================
 
 def saatlik_gonder():
@@ -310,13 +423,12 @@ def saatlik_gonder():
         print("Veri alinamadi.")
         return
     telegram_metin_gonder(mesaj_olustur(sonuclar))
-    telegram_pdf_gonder(pdf_olustur(sonuclar))
+    dosya_adi = pdf_dosya_adi()
+    telegram_pdf_gonder(pdf_olustur(sonuclar), dosya_adi)
 
-# Her saat başı çalıştır
 schedule.every().hour.at(":00").do(saatlik_gonder)
 
 print("Bot baslatildi. Her saat basi sinyal gonderilecek.")
-print("Ilk analiz basliyor...")
 saatlik_gonder()
 
 while True:
