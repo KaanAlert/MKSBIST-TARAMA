@@ -352,7 +352,8 @@ def pdf_olustur(bist50_sonuc, ozel_sonuc):
         legend_stil
     ))
     story.append(Spacer(1, 0.2*cm))
-    story.append(Paragraph(f"Veri Saati: {simdi().strftime('%H:%M')}", veri_stil))
+    parca_str = f"  ({parca})" if parca else ""
+    story.append(Paragraph(f"Veri Saati: {simdi().strftime('%H:%M')}{parca_str}", veri_stil))
 
     doc.build(story)
     buffer.seek(0)
@@ -362,7 +363,7 @@ def pdf_olustur(bist50_sonuc, ozel_sonuc):
 # PNG OLUŞTUR (Twitter - Dikey A4)
 # ============================================================
 
-def png_olustur(bist50_sonuc):
+def png_olustur(bist50_sonuc, parca=""):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
@@ -405,7 +406,8 @@ def png_olustur(bist50_sonuc):
         legend_stil
     ))
     story.append(Spacer(1, 0.15*cm))
-    story.append(Paragraph(f"Veri Saati: {simdi().strftime('%H:%M')}", veri_stil))
+    parca_str = f"  ({parca})" if parca else ""
+    story.append(Paragraph(f"Veri Saati: {simdi().strftime('%H:%M')}{parca_str}", veri_stil))
 
     doc.build(story)
 
@@ -437,14 +439,15 @@ def telegram_pdf_gonder(pdf_buffer, dosya_adi):
     )
     print(f"PDF: {r.status_code} {simdi().strftime('%H:%M')}")
 
-def telegram_foto_gonder(png_buffer, dosya_adi):
+def telegram_foto_gonder(png_buffer, dosya_adi, parca=""):
     url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+    caption = f"Twitter Gorseli {parca} - {dosya_adi}" if parca else f"Twitter Gorseli - {dosya_adi}"
     r = requests.post(
         url,
-        data={"chat_id": CHAT_ID, "caption": f"Twitter Gorseli - {dosya_adi}"},
-        files={"photo": (dosya_adi.replace(".pdf", ".png"), png_buffer, "image/png")}
+        data={"chat_id": CHAT_ID, "caption": caption},
+        files={"photo": (dosya_adi.replace(".pdf", f"_{parca.replace('/','_')}.png"), png_buffer, "image/png")}
     )
-    print(f"PNG: {r.status_code} {simdi().strftime('%H:%M')}")
+    print(f"PNG {parca}: {r.status_code} {simdi().strftime('%H:%M')}")
 
 def mesaj_olustur(sonuclar, baslik):
     now = simdi()
@@ -529,10 +532,13 @@ def tablo_gonder():
     pdf_buf   = pdf_olustur(bist50_sonuc, ozel_sonuc)
     telegram_pdf_gonder(pdf_buf, dosya_adi)
 
-    # PNG (Twitter)
+    # PNG (Twitter) - 2 parca
     try:
-        png_buf = png_olustur(bist50_sonuc)
-        telegram_foto_gonder(png_buf, dosya_adi)
+        yari = len(bist50_sonuc) // 2
+        png_buf1 = png_olustur(bist50_sonuc[:yari], "1/2")
+        telegram_foto_gonder(png_buf1, dosya_adi, "1/2")
+        png_buf2 = png_olustur(bist50_sonuc[yari:], "2/2")
+        telegram_foto_gonder(png_buf2, dosya_adi, "2/2")
     except Exception as e:
         print(f"PNG hatasi: {e}")
 
