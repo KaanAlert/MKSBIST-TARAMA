@@ -16,6 +16,9 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.graphics import renderPM
+from reportlab.graphics.shapes import Drawing
+import subprocess
 
 TOKEN   = os.environ.get("TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -26,16 +29,16 @@ TZ      = pytz.timezone("Europe/Istanbul")
 # ============================================================
 
 BIST50 = [
-    "AKBNK", "AKSEN", "ARCLK", "ASELS", "BIMAS",
-    "DOHOL", "EKGYO", "ENJSA", "EREGL", "FROTO",
-    "GARAN", "GUBRF", "HALKB", "ISCTR", "ISGYO",
-    "KCHOL", "KORDS", "KOZAL", "KRDMD", "MGROS",
-    "ODAS",  "OTKAR", "PETKM", "PGSUS", "SAHOL",
-    "SASA",  "SISE",  "SKBNK", "TAVHL", "TCELL",
-    "THYAO", "TKFEN", "TOASO", "TTKOM", "TUPRS",
-    "ULKER", "VAKBN", "VESTL", "YKBNK", "ZOREN",
-    "AEFES", "AGHOL", "ALKIM", "BERA",  "BRISA",
-    "CIMSA", "DOAS",  "ENKAI", "LOGO",  "TRKCM"
+    "AEFES", "AKBNK", "ALARK", "ARCLK", "ASELS",
+    "ASTOR", "BIMAS", "BRSAN", "BTCIM", "CCOLA",
+    "CIMSA", "DOAS",  "DOHOL", "DSTKF", "EKGYO",
+    "ENKAI", "EREGL", "FROTO", "GARAN", "GUBRF",
+    "HALKB", "HEKTS", "ISCTR", "KCHOL", "KONTR",
+    "KRDMD", "KUYAS", "MAVI",  "MGROS", "MIATK",
+    "OYAKC", "PASEU", "PETKM", "PGSUS", "SAHOL",
+    "SASA",  "SISE",  "SOKM",  "TAVHL", "TCELL",
+    "THYAO", "TOASO", "TRALT", "TRMET", "TSKB",
+    "TTKOM", "TUPRS", "ULKER", "VAKBN", "YKBNK"
 ]
 
 OZEL_HISSELER = [
@@ -378,6 +381,68 @@ def pdf_olustur(bist50_sonuc, ozel_sonuc):
 # TELEGRAM
 # ============================================================
 
+def png_olustur(bist50_sonuc):
+    """BIST 50 tablosunu dikey PNG olarak olustur (Twitter icin)"""
+    from reportlab.lib.pagesizes import A4
+    buffer_pdf = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer_pdf, pagesize=A4,
+        rightMargin=1*cm, leftMargin=1*cm,
+        topMargin=1*cm,   bottomMargin=1*cm,
+    )
+    styles = getSampleStyleSheet()
+    baslik_stil = ParagraphStyle("BP", fontSize=11, textColor=C_BASLIK_TEXT,
+                                  alignment=TA_CENTER, fontName="Helvetica-Bold", spaceAfter=2)
+    alt_stil    = ParagraphStyle("AP", fontSize=6.5, textColor=colors.HexColor("#8899BB"),
+                                  alignment=TA_CENTER, fontName="Helvetica", spaceAfter=6)
+    veri_stil   = ParagraphStyle("VP", fontSize=7, textColor=colors.HexColor("#333333"),
+                                  fontName="Helvetica-Bold", alignment=TA_CENTER)
+    story = []
+
+    # Baslik
+    baslik_data = [[Paragraph(baslik_olustur(), baslik_stil)]]
+    baslik_tablo = Table(baslik_data, colWidths=[19*cm])
+    baslik_tablo.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,-1), C_BASLIK_BG),
+        ("TOPPADDING",(0,0),(-1,-1), 7),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 7),
+    ]))
+    story.append(baslik_tablo)
+    story.append(Spacer(1, 0.2*cm))
+    story.append(Paragraph("SMI | WaveTrend | MACD | MFI   -   4 Saatlik", alt_stil))
+
+    # Tablo - dikey icin dar kolonlar
+    col_w = [2.2*cm, 1.8*cm, 1.8*cm, 1.8*cm, 2.8*cm, 2.2*cm, 2.0*cm, 2.4*cm]
+    story.append(tablo_olustur(bist50_sonuc, col_w))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(Paragraph(f"Veri Saati: {simdi().strftime('%H:%M')}", veri_stil))
+
+    doc.build(story)
+
+    # PDF'i PNG'ye cevir (ghostscript ile)
+    buffer_pdf.seek(0)
+    tmp_pdf = "/tmp/twitter_tablo.pdf"
+    tmp_png = "/tmp/twitter_tablo.png"
+    with open(tmp_pdf, "wb") as f:
+        f.write(buffer_pdf.read())
+
+    subprocess.run([
+        "gs", "-dNOPAUSE", "-dBATCH", "-sDEVICE=png16m",
+        "-r150", f"-sOutputFile={tmp_png}", tmp_pdf
+    ], capture_output=True)
+
+    with open(tmp_png, "rb") as f:
+        return BytesIO(f.read())
+
+def telegram_foto_gonder(png_buffer, dosya_adi):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+    r = requests.post(
+        url,
+        data={"chat_id": CHAT_ID, "caption": f"Twitter Gorseli - {dosya_adi}"},
+        files={"photo": (dosya_adi.replace(".pdf",".png"), png_buffer, "image/png")}
+    )
+    print(f"PNG: {r.status_code} {simdi().strftime('%H:%M')}")
+
 def telegram_metin_gonder(mesaj):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     r = requests.post(url, data={"chat_id": CHAT_ID, "text": mesaj, "parse_mode": "Markdown"})
@@ -473,8 +538,17 @@ def tablo_gonder():
         telegram_metin_gonder(mesaj_olustur(ozel_sonuc, "OZEL HISSELER"))
 
     # PDF
+    dosya_adi = pdf_dosya_adi()
     pdf_buf = pdf_olustur(bist50_sonuc, ozel_sonuc)
-    telegram_pdf_gonder(pdf_buf, pdf_dosya_adi())
+    telegram_pdf_gonder(pdf_buf, dosya_adi)
+
+    # PNG (Twitter icin)
+    try:
+        png_buf = png_olustur(bist50_sonuc)
+        telegram_foto_gonder(png_buf, dosya_adi)
+    except Exception as e:
+        print(f"PNG hatasi: {e}")
+
     print(f"Tamamlandi: {simdi().strftime('%H:%M')}")
 
 # ============================================================
