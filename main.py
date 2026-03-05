@@ -16,9 +16,8 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from reportlab.graphics import renderPM
-from reportlab.graphics.shapes import Drawing
-import subprocess
+from PIL import Image
+import fitz  # pymupdf
 
 TOKEN   = os.environ.get("TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -421,18 +420,15 @@ def png_olustur(bist50_sonuc):
 
     # PDF'i PNG'ye cevir (ghostscript ile)
     buffer_pdf.seek(0)
-    tmp_pdf = "/tmp/twitter_tablo.pdf"
-    tmp_png = "/tmp/twitter_tablo.png"
-    with open(tmp_pdf, "wb") as f:
-        f.write(buffer_pdf.read())
-
-    subprocess.run([
-        "gs", "-dNOPAUSE", "-dBATCH", "-sDEVICE=png16m",
-        "-r150", f"-sOutputFile={tmp_png}", tmp_pdf
-    ], capture_output=True)
-
-    with open(tmp_png, "rb") as f:
-        return BytesIO(f.read())
+    # PDF'i PNG'ye cevir (pymupdf ile)
+    buffer_pdf.seek(0)
+    pdf_doc = fitz.open(stream=buffer_pdf.read(), filetype="pdf")
+    page = pdf_doc[0]
+    mat = fitz.Matrix(2.0, 2.0)  # 2x zoom = yuksek cozunurluk
+    pix = page.get_pixmap(matrix=mat)
+    png_bytes = BytesIO(pix.tobytes("png"))
+    pdf_doc.close()
+    return png_bytes
 
 def telegram_foto_gonder(png_buffer, dosya_adi):
     url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
