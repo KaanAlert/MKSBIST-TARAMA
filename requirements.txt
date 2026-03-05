@@ -5,3 +5,5 @@ requests
 schedule
 reportlab
 pytz
+pymupdf
+Pillow
