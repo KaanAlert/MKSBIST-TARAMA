@@ -352,8 +352,7 @@ def pdf_olustur(bist50_sonuc, ozel_sonuc):
         legend_stil
     ))
     story.append(Spacer(1, 0.2*cm))
-    parca_str = f"  ({parca})" if parca else ""
-    story.append(Paragraph(f"Veri Saati: {simdi().strftime('%H:%M')}{parca_str}", veri_stil))
+    story.append(Paragraph(f"Veri Saati: {simdi().strftime('%H:%M')}", veri_stil))
 
     doc.build(story)
     buffer.seek(0)
