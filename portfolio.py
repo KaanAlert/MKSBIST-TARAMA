@@ -342,12 +342,16 @@ def ekstre_gonder():
     print(f"Done: {simdi().strftime('%H:%M')}")
 
 # ============================================================
-# SCHEDULE -- TR 18:00 (UTC 15:00)
+# SCHEDULE -- TR 18:30 (UTC 15:30) - Monday to Friday only
 # ============================================================
 
-schedule.every().day.at("15:00").do(ekstre_gonder)
+schedule.every().monday.at("15:30").do(ekstre_gonder)
+schedule.every().tuesday.at("15:30").do(ekstre_gonder)
+schedule.every().wednesday.at("15:30").do(ekstre_gonder)
+schedule.every().thursday.at("15:30").do(ekstre_gonder)
+schedule.every().friday.at("15:30").do(ekstre_gonder)
 
-print("Portfolio bot started. Statement will be sent daily at 18:00 TR time.")
+print("Portfolio bot started. Statement will be sent Mon-Fri at 18:30 TR time.")
 ekstre_gonder()
 
 while True:
