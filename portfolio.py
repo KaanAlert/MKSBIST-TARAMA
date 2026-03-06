@@ -18,6 +18,13 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfgen import canvas
 from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate
 
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+pdfmetrics.registerFont(TTFont("DejaVu",         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
+pdfmetrics.registerFont(TTFont("DejaVu-Bold",    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+pdfmetrics.registerFont(TTFont("DejaVu-Oblique", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"))
+
 TOKEN   = os.environ.get("TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 TZ      = pytz.timezone("Europe/Istanbul")
@@ -153,22 +160,22 @@ def pdf_olustur(sonuclar, ozet):
     now = simdi()
     ekstre_no = now.strftime("%Y%m%d")
     c.setFillColor(C_SIYAH)
-    c.setFont("Helvetica-Bold", 10)
+    c.setFont("DejaVu-Bold", 10)
     ekstre_txt = f"EKSTRE NO: {ekstre_no}"
-    ekstre_w = c.stringWidth(ekstre_txt, "Helvetica-Bold", 10)
+    ekstre_w = c.stringWidth(ekstre_txt, "DejaVu-Bold", 10)
     c.drawString(w - margin_x - ekstre_w, y, ekstre_txt)
 
     # ---- Portföy Başlangıç Tarihi (Sol üst) ----
-    c.setFont("Helvetica", 8)
+    c.setFont("DejaVu", 8)
     c.setFillColor(colors.HexColor("#666666"))
     c.drawString(margin_x, y, f"Portföy Başlangıcı: {BASLANGIC_TARIHI.strftime('%d.%m.%Y')}")
 
     y -= 0.5*cm
 
     # ---- Veri Tarihi (Sağ) ----
-    c.setFont("Helvetica", 8)
+    c.setFont("DejaVu", 8)
     tarih_txt = f"Veri Tarihi: {now.strftime('%d.%m.%Y %H:%M')}"
-    tarih_w = c.stringWidth(tarih_txt, "Helvetica", 8)
+    tarih_w = c.stringWidth(tarih_txt, "DejaVu", 8)
     c.drawString(w - margin_x - tarih_w, y, tarih_txt)
 
     y -= 1.2*cm
@@ -197,7 +204,7 @@ def pdf_olustur(sonuclar, ozet):
     c.rect(margin_x, satir_y - baslik_h, ic_genislik, baslik_h, fill=1, stroke=0)
 
     c.setFillColor(C_BEYAZ)
-    c.setFont("Helvetica-Bold", 8.5)
+    c.setFont("DejaVu-Bold", 8.5)
     for i, (header, cw) in enumerate(zip(headers, col_w)):
         hx = x_pos + cw / 2
         # İki satırlı başlık desteği
@@ -240,13 +247,13 @@ def pdf_olustur(sonuclar, ozet):
             # K/Z rengi (5=KAR/ZARAR TL, 6=K/Z%)
             if i == 5 or i == 6:
                 c.setFillColor(C_YESIL if r['kz_tl'] >= 0 else C_KIRMIZI)
-                c.setFont("Helvetica-Bold", 8.5)
+                c.setFont("DejaVu-Bold", 8.5)
             elif i == 0:
                 c.setFillColor(C_SIYAH)
-                c.setFont("Helvetica-Bold", 8.5)
+                c.setFont("DejaVu-Bold", 8.5)
             else:
                 c.setFillColor(C_SIYAH)
-                c.setFont("Helvetica", 8.5)
+                c.setFont("DejaVu", 8.5)
 
             mx = x_pos + cw / 2
             c.drawCentredString(mx, satir_y - satir_h / 2 - 3, metin)
@@ -282,26 +289,26 @@ def pdf_olustur(sonuclar, ozet):
 
         if son_satir:
             c.setFillColor(C_BEYAZ)
-            c.setFont("Helvetica-Bold", 9)
+            c.setFont("DejaVu-Bold", 9)
         else:
             c.setFillColor(C_SIYAH)
-            c.setFont("Helvetica", 8.5)
+            c.setFont("DejaVu", 8.5)
         c.drawString(ozet_x + 0.3*cm, ozet_y - ozet_satir_h / 2 - 3, etiket)
 
         if son_satir:
             c.setFillColor(C_BEYAZ)
-            c.setFont("Helvetica-Bold", 9)
+            c.setFont("DejaVu-Bold", 9)
         elif pozitif is True:
             c.setFillColor(C_YESIL)
-            c.setFont("Helvetica-Bold", 8.5)
+            c.setFont("DejaVu-Bold", 8.5)
         elif pozitif is False:
             c.setFillColor(C_KIRMIZI)
-            c.setFont("Helvetica-Bold", 8.5)
+            c.setFont("DejaVu-Bold", 8.5)
         else:
             c.setFillColor(C_SIYAH)
-            c.setFont("Helvetica-Bold", 8.5)
+            c.setFont("DejaVu-Bold", 8.5)
 
-        deger_w = c.stringWidth(deger, "Helvetica-Bold", 8.5 if not son_satir else 9)
+        deger_w = c.stringWidth(deger, "DejaVu-Bold", 8.5 if not son_satir else 9)
         c.drawString(ozet_x + ozet_col1 + ozet_col2 - deger_w - 0.3*cm,
                      ozet_y - ozet_satir_h / 2 - 3, deger)
 
@@ -309,7 +316,7 @@ def pdf_olustur(sonuclar, ozet):
 
     # ---- ALT NOT ----
     c.setFillColor(colors.HexColor("#999999"))
-    c.setFont("Helvetica-Oblique", 6.5)
+    c.setFont("DejaVu-Oblique", 6.5)
     c.drawString(margin_x, margin_y,
                  "* Fiyatlar Yahoo Finance kapanış verilerine göre hesaplanmaktadır. "
                  "Günlük K/Z bir önceki kapanışa göre hesaplanmaktadır.")
@@ -368,10 +375,10 @@ def ekstre_gonder():
     print(f"Ekstre tamamlandi: {simdi().strftime('%H:%M')}")
 
 # ============================================================
-# ZAMANLAMA — TR 18:00 (UTC 15:30)
+# ZAMANLAMA — TR 18:00 (UTC 15:00)
 # ============================================================
 
-schedule.every().day.at("15:30").do(ekstre_gonder)
+schedule.every().day.at("15:00").do(ekstre_gonder)
 
 print("Portfoy botu baslatildi. Her gun 18:00 TR saatinde ekstre gonderilecek.")
 ekstre_gonder()
