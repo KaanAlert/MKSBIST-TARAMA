@@ -120,7 +120,7 @@ def hesapla():
     }
 
 # ============================================================
-# RENK PALETİ (Tasarımla birebir)
+# RENK PALETİ
 # ============================================================
 
 C_MAVI      = colors.HexColor("#1A1AFF")
@@ -133,33 +133,7 @@ C_KIRMIZI   = colors.HexColor("#CC0000")
 C_CIZGI     = colors.HexColor("#CCCCCC")
 
 # ============================================================
-# LOGO ÇİZ (Canvas ile - ok işareti + metin)
-# ============================================================
-
-def logo_ciz(c, x, y, genislik=4*cm, yukseklik=2*cm):
-    """Yatirim Defterim logosu - ok + metin"""
-    # Ok kutucuğu (mavi kare içinde beyaz ok)
-    kutu_boyut = 1.2*cm
-    c.setFillColor(C_MAVI)
-    c.roundRect(x, y - kutu_boyut + 0.3*cm, kutu_boyut, kutu_boyut, 3, fill=1, stroke=0)
-
-    # Beyaz ok işareti
-    c.setFillColor(C_BEYAZ)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(x + 0.22*cm, y - kutu_boyut + 0.65*cm, "↗")
-
-    # YATIRIM yazısı
-    c.setFillColor(C_MAVI)
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x + kutu_boyut + 0.3*cm, y - 0.1*cm, "YATIRIM")
-
-    # DEFTERİM yazısı
-    c.setFillColor(colors.HexColor("#555555"))
-    c.setFont("Helvetica", 7)
-    c.drawString(x + kutu_boyut + 0.3*cm, y - 0.55*cm, "DEFTERİM")
-
-# ============================================================
-# PDF OLUŞTUR (Canvas tabanlı - tam kontrol)
+# PDF OLUŞTUR
 # ============================================================
 
 def pdf_olustur(sonuclar, ozet):
@@ -175,31 +149,7 @@ def pdf_olustur(sonuclar, ozet):
 
     y = h - margin_y  # Başlangıç Y
 
-    # ---- LOGO (Sol üst) ----
-    logo_ciz(c, margin_x, y - 0.2*cm)
-
-    # ---- PORTFÖY EKSTRE (Sağ üst - büyük) ----
-    c.setFillColor(C_MAVI)
-    c.setFont("Helvetica-Bold", 22)
-    baslik = "PORTFÖY EKSTRE"
-    baslik_genislik = c.stringWidth(baslik, "Helvetica-Bold", 22)
-    c.drawString(w - margin_x - baslik_genislik, y - 0.5*cm, baslik)
-
-    y -= 1.8*cm
-
-    # ---- ÇİFT YATAY ÇİZGİ ----
-    c.setStrokeColor(C_MAVI)
-    c.setLineWidth(2.5)
-    c.line(margin_x, y, w/2 - 0.5*cm, y)
-    c.line(w/2 + 0.5*cm, y, w - margin_x, y)
-    y -= 0.25*cm
-    c.setLineWidth(1)
-    c.line(margin_x, y, w/2 - 0.5*cm, y)
-    c.line(w/2 + 0.5*cm, y, w - margin_x, y)
-
-    y -= 1.0*cm
-
-    # ---- EKSTRE NO ----
+    # ---- EKSTRE NO (Sağ üst) ----
     now = simdi()
     ekstre_no = now.strftime("%Y%m%d")
     c.setFillColor(C_SIYAH)
@@ -208,46 +158,38 @@ def pdf_olustur(sonuclar, ozet):
     ekstre_w = c.stringWidth(ekstre_txt, "Helvetica-Bold", 10)
     c.drawString(w - margin_x - ekstre_w, y, ekstre_txt)
 
-    # Portföy başlangıç tarihi (sol)
+    # ---- Portföy Başlangıç Tarihi (Sol üst) ----
     c.setFont("Helvetica", 8)
     c.setFillColor(colors.HexColor("#666666"))
     c.drawString(margin_x, y, f"Portföy Başlangıcı: {BASLANGIC_TARIHI.strftime('%d.%m.%Y')}")
 
-    y -= 0.4*cm
+    y -= 0.5*cm
+
+    # ---- Veri Tarihi (Sağ) ----
     c.setFont("Helvetica", 8)
     tarih_txt = f"Veri Tarihi: {now.strftime('%d.%m.%Y %H:%M')}"
     tarih_w = c.stringWidth(tarih_txt, "Helvetica", 8)
     c.drawString(w - margin_x - tarih_w, y, tarih_txt)
 
-    y -= 1.0*cm
+    y -= 1.2*cm
 
     # ---- ANA TABLO ----
-    # Sütun genişlikleri (toplam = ic_genislik)
+    # Sütun genişlikleri — 7 sütun (GÜN SONU KAPANIS eklendi)
     col_w = [
-        ic_genislik * 0.14,  # HİSSE
-        ic_genislik * 0.17,  # MALİYET
-        ic_genislik * 0.10,  # ADET
-        ic_genislik * 0.19,  # TUTAR
-        ic_genislik * 0.22,  # KAR/ZARAR
-        ic_genislik * 0.18,  # K/Z%
+        ic_genislik * 0.12,  # HİSSE
+        ic_genislik * 0.15,  # MALİYET
+        ic_genislik * 0.08,  # ADET
+        ic_genislik * 0.17,  # GÜN SONU KAPANIS
+        ic_genislik * 0.17,  # TUTAR
+        ic_genislik * 0.17,  # KAR/ZARAR
+        ic_genislik * 0.14,  # K/Z%
     ]
 
-    headers = ["HİSSE", "MALİYET", "ADET", "TUTAR", "KAR / ZARAR", "K / Z %"]
-    data = [headers]
-
-    for r in sonuclar:
-        data.append([
-            r['hisse'],
-            para_fmt(r['maliyet']),
-            str(r['adet']),
-            para_fmt(r['guncel_deger']),
-            para_fmt(r['kz_tl']),
-            yuzde_fmt(r['kz_yuzde']),
-        ])
+    headers = ["HİSSE", "MALİYET", "ADET", "GÜN SONU\nKAPANIŞ", "TUTAR", "KAR / ZARAR", "K / Z %"]
 
     satir_y = y
     satir_h = 1.1*cm
-    baslik_h = 1.3*cm
+    baslik_h = 1.4*cm
 
     # Başlık satırı
     x_pos = margin_x
@@ -255,10 +197,16 @@ def pdf_olustur(sonuclar, ozet):
     c.rect(margin_x, satir_y - baslik_h, ic_genislik, baslik_h, fill=1, stroke=0)
 
     c.setFillColor(C_BEYAZ)
-    c.setFont("Helvetica-Bold", 9)
+    c.setFont("Helvetica-Bold", 8.5)
     for i, (header, cw) in enumerate(zip(headers, col_w)):
-        hx = x_pos + cw/2
-        c.drawCentredString(hx, satir_y - baslik_h/2 - 3, header)
+        hx = x_pos + cw / 2
+        # İki satırlı başlık desteği
+        lines = header.split("\n")
+        if len(lines) == 2:
+            c.drawCentredString(hx, satir_y - baslik_h / 2 + 2, lines[0])
+            c.drawCentredString(hx, satir_y - baslik_h / 2 - 8, lines[1])
+        else:
+            c.drawCentredString(hx, satir_y - baslik_h / 2 - 3, header)
         x_pos += cw
 
     satir_y -= baslik_h
@@ -282,14 +230,15 @@ def pdf_olustur(sonuclar, ozet):
             r['hisse'],
             para_fmt(r['maliyet']),
             str(r['adet']),
+            para_fmt(r['kapanis']),       # GÜN SONU KAPANIS
             para_fmt(r['guncel_deger']),
             para_fmt(r['kz_tl']),
             yuzde_fmt(r['kz_yuzde']),
         ]
 
         for i, (metin, cw) in enumerate(zip(satirlar, col_w)):
-            # K/Z rengi
-            if i == 4 or i == 5:
+            # K/Z rengi (5=KAR/ZARAR TL, 6=K/Z%)
+            if i == 5 or i == 6:
                 c.setFillColor(C_YESIL if r['kz_tl'] >= 0 else C_KIRMIZI)
                 c.setFont("Helvetica-Bold", 8.5)
             elif i == 0:
@@ -299,8 +248,8 @@ def pdf_olustur(sonuclar, ozet):
                 c.setFillColor(C_SIYAH)
                 c.setFont("Helvetica", 8.5)
 
-            mx = x_pos + cw/2
-            c.drawCentredString(mx, satir_y - satir_h/2 - 3, metin)
+            mx = x_pos + cw / 2
+            c.drawCentredString(mx, satir_y - satir_h / 2 - 3, metin)
             x_pos += cw
 
         satir_y -= satir_h
@@ -321,28 +270,24 @@ def pdf_olustur(sonuclar, ozet):
     for i, (etiket, deger, pozitif) in enumerate(ozet_satirlar):
         son_satir = (i == len(ozet_satirlar) - 1)
 
-        # Arka plan
         if son_satir:
             c.setFillColor(C_MAVI)
         else:
             c.setFillColor(C_GRI_ACIK)
         c.rect(ozet_x, ozet_y - ozet_satir_h, ozet_col1 + ozet_col2, ozet_satir_h, fill=1, stroke=0)
 
-        # Çizgi
         c.setStrokeColor(C_GRI_ORTA)
         c.setLineWidth(0.5)
         c.rect(ozet_x, ozet_y - ozet_satir_h, ozet_col1 + ozet_col2, ozet_satir_h, fill=0, stroke=1)
 
-        # Etiket
         if son_satir:
             c.setFillColor(C_BEYAZ)
             c.setFont("Helvetica-Bold", 9)
         else:
             c.setFillColor(C_SIYAH)
             c.setFont("Helvetica", 8.5)
-        c.drawString(ozet_x + 0.3*cm, ozet_y - ozet_satir_h/2 - 3, etiket)
+        c.drawString(ozet_x + 0.3*cm, ozet_y - ozet_satir_h / 2 - 3, etiket)
 
-        # Değer
         if son_satir:
             c.setFillColor(C_BEYAZ)
             c.setFont("Helvetica-Bold", 9)
@@ -358,7 +303,7 @@ def pdf_olustur(sonuclar, ozet):
 
         deger_w = c.stringWidth(deger, "Helvetica-Bold", 8.5 if not son_satir else 9)
         c.drawString(ozet_x + ozet_col1 + ozet_col2 - deger_w - 0.3*cm,
-                     ozet_y - ozet_satir_h/2 - 3, deger)
+                     ozet_y - ozet_satir_h / 2 - 3, deger)
 
         ozet_y -= ozet_satir_h
 
@@ -423,12 +368,12 @@ def ekstre_gonder():
     print(f"Ekstre tamamlandi: {simdi().strftime('%H:%M')}")
 
 # ============================================================
-# ZAMANLAMA — TR 18:30 (UTC 15:30)
+# ZAMANLAMA — TR 18:00 (UTC 15:30)
 # ============================================================
 
 schedule.every().day.at("15:30").do(ekstre_gonder)
 
-print("Portfoy botu baslatildi. Her gun 18:30 TR saatinde ekstre gonderilecek.")
+print("Portfoy botu baslatildi. Her gun 18:00 TR saatinde ekstre gonderilecek.")
 ekstre_gonder()
 
 while True:
