@@ -12,25 +12,14 @@ import pytz
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm, mm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfgen import canvas
-from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate
-
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-
-pdfmetrics.registerFont(TTFont("DejaVu",         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
-pdfmetrics.registerFont(TTFont("DejaVu-Bold",    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
-pdfmetrics.registerFont(TTFont("DejaVu-Oblique", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"))
 
 TOKEN   = os.environ.get("TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 TZ      = pytz.timezone("Europe/Istanbul")
 
 # ============================================================
-# PORTFÖY BİLGİLERİ
+# PORTFOY BILGILERI
 # ============================================================
 
 BASLANGIC_TARIHI = date(2026, 3, 2)
@@ -44,7 +33,7 @@ PORTFOY = [
 ]
 
 # ============================================================
-# YARDIMCI FONKSİYONLAR
+# YARDIMCI FONKSIYONLAR
 # ============================================================
 
 def simdi():
@@ -61,7 +50,7 @@ def yuzde_fmt(yuzde):
     return f"%{isaretli}"
 
 # ============================================================
-# VERİ ÇEK
+# VERI CEK
 # ============================================================
 
 def kapanis_al(hisse, onceki=False):
@@ -127,90 +116,87 @@ def hesapla():
     }
 
 # ============================================================
-# RENK PALETİ
+# RENK PALETI
 # ============================================================
 
-C_MAVI      = colors.HexColor("#1A1AFF")
-C_BEYAZ     = colors.white
-C_SIYAH     = colors.HexColor("#1A1A1A")
-C_GRI_ACIK  = colors.HexColor("#F8F8F8")
-C_GRI_ORTA  = colors.HexColor("#E0E0E0")
-C_YESIL     = colors.HexColor("#1A7A1A")
-C_KIRMIZI   = colors.HexColor("#CC0000")
-C_CIZGI     = colors.HexColor("#CCCCCC")
+C_MAVI     = colors.HexColor("#1A1AFF")
+C_BEYAZ    = colors.white
+C_SIYAH    = colors.HexColor("#1A1A1A")
+C_GRI_ACIK = colors.HexColor("#F8F8F8")
+C_GRI_ORTA = colors.HexColor("#E0E0E0")
+C_YESIL    = colors.HexColor("#1A7A1A")
+C_KIRMIZI  = colors.HexColor("#CC0000")
 
 # ============================================================
-# PDF OLUŞTUR
+# PDF OLUSTUR
 # ============================================================
 
 def pdf_olustur(sonuclar, ozet):
     buffer = BytesIO()
-    w, h = A4  # 595 x 842 pt
+    w, h = A4
 
     c = canvas.Canvas(buffer, pagesize=A4)
-    c.setTitle("Portfoy Ekstre")
+    c.setTitle("Portfolio Statement")
 
-    margin_x = 2*cm
-    margin_y = 2*cm
+    margin_x    = 2*cm
+    margin_y    = 2*cm
     ic_genislik = w - 2 * margin_x
 
-    y = h - margin_y  # Başlangıç Y
+    y = h - margin_y
 
-    # ---- EKSTRE NO (Sağ üst) ----
-    now = simdi()
-    ekstre_no = now.strftime("%Y%m%d")
+    # ---- STATEMENT NO (top right) ----
+    now        = simdi()
+    ekstre_no  = now.strftime("%Y%m%d")
+    ekstre_txt = f"STATEMENT NO: {ekstre_no}"
     c.setFillColor(C_SIYAH)
-    c.setFont("DejaVu-Bold", 10)
-    ekstre_txt = f"EKSTRE NO: {ekstre_no}"
-    ekstre_w = c.stringWidth(ekstre_txt, "DejaVu-Bold", 10)
+    c.setFont("Helvetica-Bold", 10)
+    ekstre_w = c.stringWidth(ekstre_txt, "Helvetica-Bold", 10)
     c.drawString(w - margin_x - ekstre_w, y, ekstre_txt)
 
-    # ---- Portföy Başlangıç Tarihi (Sol üst) ----
-    c.setFont("DejaVu", 8)
+    # ---- Portfolio start date (top left) ----
+    c.setFont("Helvetica", 8)
     c.setFillColor(colors.HexColor("#666666"))
-    c.drawString(margin_x, y, f"Portföy Başlangıcı: {BASLANGIC_TARIHI.strftime('%d.%m.%Y')}")
+    c.drawString(margin_x, y, f"Portfolio Start: {BASLANGIC_TARIHI.strftime('%d.%m.%Y')}")
 
     y -= 0.5*cm
 
-    # ---- Veri Tarihi (Sağ) ----
-    c.setFont("DejaVu", 8)
-    tarih_txt = f"Veri Tarihi: {now.strftime('%d.%m.%Y %H:%M')}"
-    tarih_w = c.stringWidth(tarih_txt, "DejaVu", 8)
+    # ---- Data date (right) ----
+    tarih_txt = f"Data Date: {now.strftime('%d.%m.%Y %H:%M')}"
+    c.setFont("Helvetica", 8)
+    tarih_w = c.stringWidth(tarih_txt, "Helvetica", 8)
     c.drawString(w - margin_x - tarih_w, y, tarih_txt)
 
     y -= 1.2*cm
 
-    # ---- ANA TABLO ----
-    # Sütun genişlikleri — 7 sütun (GÜN SONU KAPANIS eklendi)
+    # ---- MAIN TABLE ----
     col_w = [
-        ic_genislik * 0.12,  # HİSSE
-        ic_genislik * 0.15,  # MALİYET
-        ic_genislik * 0.08,  # ADET
-        ic_genislik * 0.17,  # GÜN SONU KAPANIS
-        ic_genislik * 0.17,  # TUTAR
-        ic_genislik * 0.17,  # KAR/ZARAR
-        ic_genislik * 0.14,  # K/Z%
+        ic_genislik * 0.12,  # STOCK
+        ic_genislik * 0.15,  # COST
+        ic_genislik * 0.08,  # QTY
+        ic_genislik * 0.17,  # CLOSE PRICE
+        ic_genislik * 0.17,  # VALUE
+        ic_genislik * 0.17,  # P / L
+        ic_genislik * 0.14,  # P/L %
     ]
 
-    headers = ["HİSSE", "MALİYET", "ADET", "GÜN SONU\nKAPANIŞ", "TUTAR", "KAR / ZARAR", "K / Z %"]
+    headers = ["STOCK", "COST", "QTY", "CLOSE\nPRICE", "VALUE", "P / L", "P/L %"]
 
-    satir_y = y
-    satir_h = 1.1*cm
+    satir_y  = y
+    satir_h  = 1.1*cm
     baslik_h = 1.4*cm
 
-    # Başlık satırı
-    x_pos = margin_x
+    # Header row
     c.setFillColor(C_MAVI)
     c.rect(margin_x, satir_y - baslik_h, ic_genislik, baslik_h, fill=1, stroke=0)
 
     c.setFillColor(C_BEYAZ)
-    c.setFont("DejaVu-Bold", 8.5)
-    for i, (header, cw) in enumerate(zip(headers, col_w)):
-        hx = x_pos + cw / 2
-        # İki satırlı başlık desteği
+    c.setFont("Helvetica-Bold", 8.5)
+    x_pos = margin_x
+    for header, cw in zip(headers, col_w):
+        hx    = x_pos + cw / 2
         lines = header.split("\n")
         if len(lines) == 2:
-            c.drawCentredString(hx, satir_y - baslik_h / 2 + 2, lines[0])
+            c.drawCentredString(hx, satir_y - baslik_h / 2 + 2,  lines[0])
             c.drawCentredString(hx, satir_y - baslik_h / 2 - 8, lines[1])
         else:
             c.drawCentredString(hx, satir_y - baslik_h / 2 - 3, header)
@@ -218,108 +204,89 @@ def pdf_olustur(sonuclar, ozet):
 
     satir_y -= baslik_h
 
-    # Veri satırları
+    # Data rows
     for idx, r in enumerate(sonuclar):
-        # Zebra
-        if idx % 2 == 0:
-            c.setFillColor(C_BEYAZ)
-        else:
-            c.setFillColor(C_GRI_ACIK)
+        c.setFillColor(C_BEYAZ if idx % 2 == 0 else C_GRI_ACIK)
         c.rect(margin_x, satir_y - satir_h, ic_genislik, satir_h, fill=1, stroke=0)
 
-        # Alt çizgi
         c.setStrokeColor(C_GRI_ORTA)
         c.setLineWidth(0.5)
         c.line(margin_x, satir_y - satir_h, w - margin_x, satir_y - satir_h)
 
-        x_pos = margin_x
-        satirlar = [
+        cells = [
             r['hisse'],
             para_fmt(r['maliyet']),
             str(r['adet']),
-            para_fmt(r['kapanis']),       # GÜN SONU KAPANIS
+            para_fmt(r['kapanis']),
             para_fmt(r['guncel_deger']),
             para_fmt(r['kz_tl']),
             yuzde_fmt(r['kz_yuzde']),
         ]
 
-        for i, (metin, cw) in enumerate(zip(satirlar, col_w)):
-            # K/Z rengi (5=KAR/ZARAR TL, 6=K/Z%)
-            if i == 5 or i == 6:
+        x_pos = margin_x
+        for i, (metin, cw) in enumerate(zip(cells, col_w)):
+            if i in (5, 6):
                 c.setFillColor(C_YESIL if r['kz_tl'] >= 0 else C_KIRMIZI)
-                c.setFont("DejaVu-Bold", 8.5)
+                c.setFont("Helvetica-Bold", 8.5)
             elif i == 0:
                 c.setFillColor(C_SIYAH)
-                c.setFont("DejaVu-Bold", 8.5)
+                c.setFont("Helvetica-Bold", 8.5)
             else:
                 c.setFillColor(C_SIYAH)
-                c.setFont("DejaVu", 8.5)
+                c.setFont("Helvetica", 8.5)
 
-            mx = x_pos + cw / 2
-            c.drawCentredString(mx, satir_y - satir_h / 2 - 3, metin)
+            c.drawCentredString(x_pos + cw / 2, satir_y - satir_h / 2 - 3, metin)
             x_pos += cw
 
         satir_y -= satir_h
 
-    # ---- ÖZET TABLO (Sağ alt) ----
-    ozet_y = satir_y - 0.6*cm
-    ozet_x = w - margin_x - 8*cm
-    ozet_col1 = 5.5*cm
-    ozet_col2 = 2.5*cm
+    # ---- SUMMARY TABLE (bottom right) ----
+    ozet_y       = satir_y - 0.6*cm
+    ozet_x       = w - margin_x - 8*cm
+    ozet_col1    = 5.5*cm
+    ozet_col2    = 2.5*cm
     ozet_satir_h = 0.85*cm
 
-    ozet_satirlar = [
-        ("GÜNLÜK KAR / ZARAR ORTALAMA", para_fmt(ozet['gunluk_kz']), ozet['gunluk_kz'] >= 0),
-        ("AYLIK KAR / ZARAR",           para_fmt(ozet['aylik_kz']),  ozet['aylik_kz'] >= 0),
-        ("TOPLAM",                       para_fmt(ozet['toplam_deger']), None),
+    ozet_rows = [
+        ("DAILY P / L AVG",  para_fmt(ozet['gunluk_kz']),    ozet['gunluk_kz'] >= 0),
+        ("MONTHLY P / L",    para_fmt(ozet['aylik_kz']),     ozet['aylik_kz'] >= 0),
+        ("TOTAL",            para_fmt(ozet['toplam_deger']), None),
     ]
 
-    for i, (etiket, deger, pozitif) in enumerate(ozet_satirlar):
-        son_satir = (i == len(ozet_satirlar) - 1)
+    for i, (label, value, pozitif) in enumerate(ozet_rows):
+        son_satir = (i == len(ozet_rows) - 1)
 
-        if son_satir:
-            c.setFillColor(C_MAVI)
-        else:
-            c.setFillColor(C_GRI_ACIK)
+        c.setFillColor(C_MAVI if son_satir else C_GRI_ACIK)
         c.rect(ozet_x, ozet_y - ozet_satir_h, ozet_col1 + ozet_col2, ozet_satir_h, fill=1, stroke=0)
-
         c.setStrokeColor(C_GRI_ORTA)
         c.setLineWidth(0.5)
         c.rect(ozet_x, ozet_y - ozet_satir_h, ozet_col1 + ozet_col2, ozet_satir_h, fill=0, stroke=1)
 
-        if son_satir:
-            c.setFillColor(C_BEYAZ)
-            c.setFont("DejaVu-Bold", 9)
-        else:
-            c.setFillColor(C_SIYAH)
-            c.setFont("DejaVu", 8.5)
-        c.drawString(ozet_x + 0.3*cm, ozet_y - ozet_satir_h / 2 - 3, etiket)
+        c.setFillColor(C_BEYAZ if son_satir else C_SIYAH)
+        c.setFont("Helvetica-Bold" if son_satir else "Helvetica", 9 if son_satir else 8.5)
+        c.drawString(ozet_x + 0.3*cm, ozet_y - ozet_satir_h / 2 - 3, label)
 
+        font_size = 9 if son_satir else 8.5
         if son_satir:
             c.setFillColor(C_BEYAZ)
-            c.setFont("DejaVu-Bold", 9)
         elif pozitif is True:
             c.setFillColor(C_YESIL)
-            c.setFont("DejaVu-Bold", 8.5)
         elif pozitif is False:
             c.setFillColor(C_KIRMIZI)
-            c.setFont("DejaVu-Bold", 8.5)
         else:
             c.setFillColor(C_SIYAH)
-            c.setFont("DejaVu-Bold", 8.5)
-
-        deger_w = c.stringWidth(deger, "DejaVu-Bold", 8.5 if not son_satir else 9)
-        c.drawString(ozet_x + ozet_col1 + ozet_col2 - deger_w - 0.3*cm,
-                     ozet_y - ozet_satir_h / 2 - 3, deger)
+        c.setFont("Helvetica-Bold", font_size)
+        val_w = c.stringWidth(value, "Helvetica-Bold", font_size)
+        c.drawString(ozet_x + ozet_col1 + ozet_col2 - val_w - 0.3*cm,
+                     ozet_y - ozet_satir_h / 2 - 3, value)
 
         ozet_y -= ozet_satir_h
 
-    # ---- ALT NOT ----
+    # ---- FOOTER ----
     c.setFillColor(colors.HexColor("#999999"))
-    c.setFont("DejaVu-Oblique", 6.5)
+    c.setFont("Helvetica-Oblique", 6.5)
     c.drawString(margin_x, margin_y,
-                 "* Fiyatlar Yahoo Finance kapanış verilerine göre hesaplanmaktadır. "
-                 "Günlük K/Z bir önceki kapanışa göre hesaplanmaktadır.")
+                 "* Prices based on Yahoo Finance closing data. Daily P/L calculated vs previous close.")
 
     c.save()
     buffer.seek(0)
@@ -333,20 +300,20 @@ def telegram_pdf_gonder(pdf_buffer, dosya_adi):
     url = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
     r = requests.post(
         url,
-        data={"chat_id": CHAT_ID, "caption": f"📊 Portföy Ekstre - {dosya_adi}"},
+        data={"chat_id": CHAT_ID, "caption": f"Portfolio Statement - {dosya_adi}"},
         files={"document": (dosya_adi, pdf_buffer, "application/pdf")}
     )
-    print(f"Ekstre PDF: {r.status_code} {simdi().strftime('%H:%M')}")
+    print(f"PDF sent: {r.status_code} {simdi().strftime('%H:%M')}")
 
 def telegram_metin_gonder(mesaj):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     r = requests.post(url, data={"chat_id": CHAT_ID, "text": mesaj, "parse_mode": "Markdown"})
-    print(f"Ekstre Metin: {r.status_code} {simdi().strftime('%H:%M')}")
+    print(f"Text sent: {r.status_code} {simdi().strftime('%H:%M')}")
 
 def ozet_mesaj(sonuclar, ozet):
     now = simdi()
-    mesaj = f"📊 *PORTFÖY EKSTRE - {now.strftime('%d.%m.%Y')}*\n\n"
-    mesaj += "`Hisse  | Kapanis  | K/Z TL      | K/Z%`\n"
+    mesaj  = f"*PORTFOLIO STATEMENT - {now.strftime('%d.%m.%Y')}*\n\n"
+    mesaj += "`Stock  | Close    | P/L TL      | P/L%`\n"
     mesaj += "`" + "-"*42 + "`\n"
     for r in sonuclar:
         h   = r['hisse'].ljust(6)
@@ -354,33 +321,33 @@ def ozet_mesaj(sonuclar, ozet):
         kzt = f"{r['kz_tl']:+.0f}TL".ljust(11)
         kzp = f"{r['kz_yuzde']:+.1f}%"
         mesaj += f"`{h} | {kap} | {kzt} | {kzp}`\n"
-    mesaj += f"\n*Gunluk K/Z:* {para_fmt(ozet['gunluk_kz'])}"
-    mesaj += f"\n*Aylik K/Z:* {para_fmt(ozet['aylik_kz'])}"
-    mesaj += f"\n*Toplam Deger:* {para_fmt(ozet['toplam_deger'])}"
-    mesaj += f"\n*Toplam K/Z:* {yuzde_fmt(ozet['toplam_kz_yuzde'])}"
+    mesaj += f"\n*Daily P/L:* {para_fmt(ozet['gunluk_kz'])}"
+    mesaj += f"\n*Monthly P/L:* {para_fmt(ozet['aylik_kz'])}"
+    mesaj += f"\n*Total Value:* {para_fmt(ozet['toplam_deger'])}"
+    mesaj += f"\n*Total P/L:* {yuzde_fmt(ozet['toplam_kz_yuzde'])}"
     return mesaj
 
 # ============================================================
-# ANA FONKSİYON
+# MAIN
 # ============================================================
 
 def ekstre_gonder():
-    print(f"Ekstre hazirlaniyor... {simdi().strftime('%H:%M')}")
+    print(f"Preparing statement... {simdi().strftime('%H:%M')}")
     sonuclar, ozet = hesapla()
     telegram_metin_gonder(ozet_mesaj(sonuclar, ozet))
-    now = simdi()
-    dosya_adi = f"PORTFOY_EKSTRE_{now.strftime('%d%m%Y')}.pdf"
-    pdf_buf = pdf_olustur(sonuclar, ozet)
+    now       = simdi()
+    dosya_adi = f"PORTFOLIO_{now.strftime('%d%m%Y')}.pdf"
+    pdf_buf   = pdf_olustur(sonuclar, ozet)
     telegram_pdf_gonder(pdf_buf, dosya_adi)
-    print(f"Ekstre tamamlandi: {simdi().strftime('%H:%M')}")
+    print(f"Done: {simdi().strftime('%H:%M')}")
 
 # ============================================================
-# ZAMANLAMA — TR 18:00 (UTC 15:00)
+# SCHEDULE -- TR 18:00 (UTC 15:00)
 # ============================================================
 
 schedule.every().day.at("15:00").do(ekstre_gonder)
 
-print("Portfoy botu baslatildi. Her gun 18:00 TR saatinde ekstre gonderilecek.")
+print("Portfolio bot started. Statement will be sent daily at 18:00 TR time.")
 ekstre_gonder()
 
 while True:
