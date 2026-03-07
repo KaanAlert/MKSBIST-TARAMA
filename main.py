@@ -489,16 +489,13 @@ def tablo_gonder():
     print(f"Tamamlandi: {simdi().strftime('%H:%M')}")
 
 schedule.every().day.at("06:00").do(tablo_gonder)   # TR 09:00
-schedule.every().day.at("07:00").do(tablo_gonder)   # TR 10:00
-schedule.every().day.at("09:00").do(tablo_gonder)   # TR 12:00
-schedule.every().day.at("11:00").do(tablo_gonder)   # TR 14:00
-schedule.every().day.at("13:00").do(tablo_gonder)   # TR 16:00
-schedule.every().day.at("15:00").do(tablo_gonder)   # TR 18:00
-schedule.every().day.at("15:10").do(tablo_gonder)   # TR 18:10
+schedule.every().day.at("10:16").do(tablo_gonder)   # TR 13:16
+schedule.every().day.at("14:16").do(tablo_gonder)   # TR 17:16
+schedule.every().day.at("15:30").do(tablo_gonder)   # TR 18:30
 schedule.every(15).minutes.do(hacim_uyari_kontrol)
 
 print("Bot baslatildi.")
-print("Tablo saatleri: 09:00 10:00 12:00 14:00 16:00 18:00 18:10 (TR saati)")
+print("Tablo saatleri: 09:00 13:16 17:16 18:30 (TR saati)")
 print("Hacim anomali kontrolu: her 15 dakikada bir")
 tablo_gonder()
 
