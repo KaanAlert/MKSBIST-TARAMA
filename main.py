@@ -469,33 +469,47 @@ def tablo_gonder():
         print("Veri alinamadi.")
         return
 
-    telegram_metin_gonder(mesaj_olustur(bist50_sonuc, "BIST 50"))
-    if ozel_sonuc:
-        telegram_metin_gonder(mesaj_olustur(ozel_sonuc, "OZEL HISSELER"))
-
-    dosya_adi = pdf_dosya_adi()
-    pdf_buf   = pdf_olustur(bist50_sonuc, ozel_sonuc)
-    telegram_pdf_gonder(pdf_buf, dosya_adi)
-
     try:
         yari = len(bist50_sonuc) // 2
         png_buf1 = png_olustur(bist50_sonuc[:yari], "1/2")
-        telegram_foto_gonder(png_buf1, dosya_adi, "1/2")
+        telegram_foto_gonder(png_buf1, pdf_dosya_adi(), "1/2")
         png_buf2 = png_olustur(bist50_sonuc[yari:], "2/2")
-        telegram_foto_gonder(png_buf2, dosya_adi, "2/2")
+        telegram_foto_gonder(png_buf2, pdf_dosya_adi(), "2/2")
     except Exception as e:
         print(f"PNG hatasi: {e}")
 
     print(f"Tamamlandi: {simdi().strftime('%H:%M')}")
 
-schedule.every().day.at("06:00").do(tablo_gonder)   # TR 09:00
-schedule.every().day.at("10:16").do(tablo_gonder)   # TR 13:16
-schedule.every().day.at("14:16").do(tablo_gonder)   # TR 17:16
-schedule.every().day.at("15:30").do(tablo_gonder)   # TR 18:30
+
+# ============================================================
+# PORTFOY GONDER (sadece 18:30)
+# ============================================================
+
+def portfoy_gonder():
+    print(f"Portfoy gonderiliyor... {simdi().strftime('%H:%M')}")
+    bist50_sonuc = analiz_et(BIST50)
+    ozel_sonuc   = analiz_et(OZEL_HISSELER)
+
+    if not bist50_sonuc:
+        print("Veri alinamadi.")
+        return
+
+    dosya_adi = pdf_dosya_adi()
+    pdf_buf   = pdf_olustur(bist50_sonuc, ozel_sonuc)
+    telegram_pdf_gonder(pdf_buf, dosya_adi)
+    print(f"Portfoy tamamlandi: {simdi().strftime('%H:%M')}")
+
+schedule.every().day.at("06:00").do(tablo_gonder)   # TR 09:00 - Tablo
+schedule.every().day.at("10:16").do(tablo_gonder)   # TR 13:16 - Tablo
+schedule.every().day.at("14:16").do(tablo_gonder)   # TR 17:16 - Tablo
+schedule.every().day.at("15:30").do(tablo_gonder)   # TR 18:30 - Tablo
+schedule.every().day.at("15:30").do(portfoy_gonder) # TR 18:30 - Portfoy PDF
 schedule.every(15).minutes.do(hacim_uyari_kontrol)
 
 print("Bot baslatildi.")
-print("Tablo saatleri: 09:00 13:16 17:16 18:30 (TR saati)")
+print("Tablo saatleri : 09:00 13:16 17:16 18:30 (TR saati)")
+print("Portfoy PDF    : 18:30 (TR saati)")
+print("Hacim anomali  : her 15 dakikada bir")
 print("Hacim anomali kontrolu: her 15 dakikada bir")
 tablo_gonder()
 
