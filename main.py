@@ -21,10 +21,6 @@ TOKEN   = os.environ.get("TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 TZ      = pytz.timezone("Europe/Istanbul")
 
-# ============================================================
-# HİSSE LİSTELERİ
-# ============================================================
-
 BIST50 = [
     "AEFES", "AKBNK", "ALARK", "ARCLK", "ASELS",
     "ASTOR", "BIMAS", "BRSAN", "BTCIM", "CCOLA",
@@ -46,9 +42,6 @@ OZEL_HISSELER = [
 
 def yahoo_sembol(h): return f"{h}.IS"
 
-# ============================================================
-# GUN ADI
-# ============================================================
 GUNLER = {
     "Monday": "PAZARTESI", "Tuesday": "SALI", "Wednesday": "CARSAMBA",
     "Thursday": "PERSEMBE", "Friday": "CUMA", "Saturday": "CUMARTESI",
@@ -59,10 +52,6 @@ def gun_adi():
 
 def simdi():
     return datetime.now(TZ)
-
-# ============================================================
-# İNDİKATÖR HESAPLAMALARI
-# ============================================================
 
 def hesapla_wavetrend(df, n1=10, n2=21):
     ap  = (df['High'] + df['Low'] + df['Close']) / 3
@@ -126,15 +115,11 @@ def hesapla_hacim(df, period=20):
 
 def pozisyon(smi_al, wt_al, macd_al):
     al = sum([smi_al, wt_al, macd_al])
-    if al == 3:      return "GUCLU AL"
-    if al == 2:      return "AL"
-    if al == 0:      return "GUCLU SAT"
-    if al == 1:      return "SAT"
+    if al == 3:  return "GUCLU AL"
+    if al == 2:  return "AL"
+    if al == 0:  return "GUCLU SAT"
+    if al == 1:  return "SAT"
     return "BEKLE"
-
-# ============================================================
-# ANALİZ
-# ============================================================
 
 def analiz_et(liste):
     sonuclar = []
@@ -168,10 +153,6 @@ def analiz_et(liste):
         except Exception as e:
             print(f"{hisse} hata: {e}")
     return sonuclar
-
-# ============================================================
-# RENK PALETİ
-# ============================================================
 
 C_BASLIK_BG    = colors.HexColor("#1B2A4A")
 C_BASLIK_TEXT  = colors.HexColor("#FFFFFF")
@@ -224,10 +205,6 @@ def hacim_renk(oran):
     if oran <= 0.8: return C_SAT_BG, C_SAT_TEXT
     return C_BEKLE_BG, C_BEKLE_TEXT
 
-# ============================================================
-# TABLO STİL YARDIMCISI
-# ============================================================
-
 def satir_stilleri(sonuclar, baslangic=1):
     stil = []
     for i, r in enumerate(sonuclar, start=baslangic):
@@ -248,7 +225,7 @@ def satir_stilleri(sonuclar, baslangic=1):
     return stil
 
 def tablo_yap(sonuclar, col_w, font_baslik=8.5, font_veri=8):
-    headers = ["HISSE", "SMI", "WT", "MACD", "POZISYON", "MFI TREND", "MFI", "HACIM(ORT/MEV)"]
+    headers = ["HISSE", "α", "β", "σ", "POZISYON", "MFI TREND", "MFI", "HACIM(ORT/MEV)"]
     data = [headers]
     for r in sonuclar:
         mfi_str = str(r['MFI_Val']) if r['MFI_Val'] is not None else "N/A"
@@ -280,10 +257,6 @@ def tablo_yap(sonuclar, col_w, font_baslik=8.5, font_veri=8):
     tablo.setStyle(TableStyle(stil))
     return tablo
 
-# ============================================================
-# PDF OLUŞTUR
-# ============================================================
-
 def baslik_olustur():
     now = simdi()
     return f"MKS TARAMA   {now.strftime('%d.%m.%Y')} {gun_adi()}"
@@ -313,7 +286,6 @@ def pdf_olustur(bist50_sonuc, ozel_sonuc):
 
     story = []
 
-    # Baslik
     bt = Table([[Paragraph(baslik_olustur(), baslik_stil)]], colWidths=[25.6*cm])
     bt.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(-1,-1), C_BASLIK_BG),
@@ -322,14 +294,12 @@ def pdf_olustur(bist50_sonuc, ozel_sonuc):
     ]))
     story.append(bt)
     story.append(Spacer(1, 0.2*cm))
-    story.append(Paragraph("SMI | WaveTrend | MACD | MFI   -   4 Saatlik Grafik Analizi", alt_stil))
+    story.append(Paragraph("α | β | σ | MFI   -   4 Saatlik Grafik Analizi", alt_stil))
 
-    # BIST 50
     story.append(Paragraph("BIST 50", bolum_stil))
     col_w = [2.8*cm, 2.2*cm, 2.2*cm, 2.2*cm, 3.4*cm, 2.8*cm, 2.2*cm, 3.6*cm]
     story.append(tablo_yap(bist50_sonuc, col_w))
 
-    # Ozet
     story.append(Spacer(1, 0.3*cm))
     gal  = [r['Hisse'] for r in bist50_sonuc if r['Pozisyon'] == "GUCLU AL"]
     gsat = [r['Hisse'] for r in bist50_sonuc if r['Pozisyon'] == "GUCLU SAT"]
@@ -338,13 +308,11 @@ def pdf_olustur(bist50_sonuc, ozel_sonuc):
     if gal:  story.append(Paragraph(f"GUCLU AL: {', '.join(gal)}", oz))
     if gsat: story.append(Paragraph(f"GUCLU SAT: {', '.join(gsat)}", oz))
 
-    # Özel hisseler
     if ozel_sonuc:
         story.append(Spacer(1, 0.4*cm))
         story.append(Paragraph("OZEL HISSELER", bolum_stil))
         story.append(tablo_yap(ozel_sonuc, col_w))
 
-    # Legend + veri saati
     story.append(Spacer(1, 0.3*cm))
     story.append(Paragraph(
         "MFI: 80+ Asiri Alim | 60-80 Guclu | 40-60 Notr | 20-40 Zayif | 0-20 Asiri Satim   |   "
@@ -357,10 +325,6 @@ def pdf_olustur(bist50_sonuc, ozel_sonuc):
     doc.build(story)
     buffer.seek(0)
     return buffer
-
-# ============================================================
-# PNG OLUŞTUR (Twitter - Dikey A4)
-# ============================================================
 
 def png_olustur(bist50_sonuc, parca=""):
     buffer = BytesIO()
@@ -381,7 +345,6 @@ def png_olustur(bist50_sonuc, parca=""):
 
     story = []
 
-    # Baslik - A4 dikey genisligi: 21cm - 1.6cm margin = 19.4cm
     genislik = 19.4*cm
     bt = Table([[Paragraph(baslik_olustur(), baslik_stil)]], colWidths=[genislik])
     bt.setStyle(TableStyle([
@@ -391,10 +354,8 @@ def png_olustur(bist50_sonuc, parca=""):
     ]))
     story.append(bt)
     story.append(Spacer(1, 0.15*cm))
-    story.append(Paragraph("SMI | WaveTrend | MACD | MFI   -   4 Saatlik Grafik Analizi", alt_stil))
+    story.append(Paragraph("α | β | σ | MFI   -   4 Saatlik Grafik Analizi", alt_stil))
 
-    # Kolonlar: toplam 19.4cm
-    # HISSE(2.8) SMI(1.8) WT(1.8) MACD(1.8) POZISYON(3.0) MFITREND(2.4) MFI(1.8) HACIM(4.0)
     col_w = [2.8*cm, 1.8*cm, 1.8*cm, 1.8*cm, 3.0*cm, 2.4*cm, 1.8*cm, 4.0*cm]
     story.append(tablo_yap(bist50_sonuc, col_w, font_baslik=7, font_veri=6.5))
 
@@ -410,19 +371,14 @@ def png_olustur(bist50_sonuc, parca=""):
 
     doc.build(story)
 
-    # PDF -> PNG (pymupdf)
     buffer.seek(0)
     pdf_doc = fitz.open(stream=buffer.read(), filetype="pdf")
     page    = pdf_doc[0]
-    mat     = fitz.Matrix(2.5, 2.5)  # Yuksek cozunurluk
+    mat     = fitz.Matrix(2.5, 2.5)
     pix     = page.get_pixmap(matrix=mat)
     png_buf = BytesIO(pix.tobytes("png"))
     pdf_doc.close()
     return png_buf
-
-# ============================================================
-# TELEGRAM
-# ============================================================
 
 def telegram_metin_gonder(mesaj):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -451,7 +407,7 @@ def telegram_foto_gonder(png_buffer, dosya_adi, parca=""):
 def mesaj_olustur(sonuclar, baslik):
     now = simdi()
     mesaj = f"*{baslik} - {now.strftime('%d.%m.%Y')} {gun_adi()} {now.strftime('%H:%M')}*\n\n"
-    mesaj += "`Hisse |SMI|WT |MACD|Pozisyon  |MFI |Val`\n"
+    mesaj += "`Hisse |α  |β  |σ   |Pozisyon  |MFI |Val`\n"
     mesaj += "`" + "-"*44 + "`\n"
     for r in sonuclar:
         h   = r['Hisse'].ljust(6)
@@ -467,10 +423,6 @@ def mesaj_olustur(sonuclar, baslik):
     if gal:  mesaj += f"\n*GUCLU AL:* {', '.join(gal)}"
     if gsat: mesaj += f"\n*GUCLU SAT:* {', '.join(gsat)}"
     return mesaj
-
-# ============================================================
-# HACİM UYARISI
-# ============================================================
 
 onceki_uyari = {}
 
@@ -502,15 +454,11 @@ def hacim_uyari_kontrol():
             pass
 
     if uyarilar:
-        mesaj = f"🚨 *HACIM ANOMALISI!*\n_{simdi().strftime('%H:%M')}_\n\n"
+        mesaj = f"HACIM ANOMALISI!\n_{simdi().strftime('%H:%M')}_\n\n"
         for u in uyarilar:
             mesaj += f"`{u}`\n"
         telegram_metin_gonder(mesaj)
         print(f"Hacim uyarisi: {len(uyarilar)} hisse")
-
-# ============================================================
-# ANA FONKSİYON
-# ============================================================
 
 def tablo_gonder():
     print(f"Analiz basliyor... {simdi().strftime('%H:%M')}")
@@ -521,17 +469,14 @@ def tablo_gonder():
         print("Veri alinamadi.")
         return
 
-    # Metin mesajlari
     telegram_metin_gonder(mesaj_olustur(bist50_sonuc, "BIST 50"))
     if ozel_sonuc:
         telegram_metin_gonder(mesaj_olustur(ozel_sonuc, "OZEL HISSELER"))
 
-    # PDF
     dosya_adi = pdf_dosya_adi()
     pdf_buf   = pdf_olustur(bist50_sonuc, ozel_sonuc)
     telegram_pdf_gonder(pdf_buf, dosya_adi)
 
-    # PNG (Twitter) - 2 parca
     try:
         yari = len(bist50_sonuc) // 2
         png_buf1 = png_olustur(bist50_sonuc[:yari], "1/2")
@@ -542,10 +487,6 @@ def tablo_gonder():
         print(f"PNG hatasi: {e}")
 
     print(f"Tamamlandi: {simdi().strftime('%H:%M')}")
-
-# ============================================================
-# ZAMANLAMA — Türkiye Saati (UTC+3)
-# ============================================================
 
 schedule.every().day.at("06:00").do(tablo_gonder)   # TR 09:00
 schedule.every().day.at("07:00").do(tablo_gonder)   # TR 10:00
